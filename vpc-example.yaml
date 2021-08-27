@@ -1,0 +1,86 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 
+  'Demonstrate how to create subnets using the az-mapping solution.
+  Use the Systems Manager Parameter Store values for az-mapping by specifying
+  dynamic references in the template. For more information see: 
+  https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/dynamic-references.html'
+Parameters:
+  VPCCidr:
+    Type: String
+    Default: 10.0.0.0/22
+
+  PrivateSubnetAZ1CIDR:
+    Type: String
+    Default:  10.0.0.0/24
+    
+  PrivateSubnetAZ2CIDR: 
+    Type: String
+    Default: 10.0.1.0/24
+
+  PrivateSubnetAZ3CIDR: 
+    Type: String
+    Default: 10.0.2.0/24
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VPCCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+
+  # ********************************************************************************
+  # subnets
+  PrivateSubnet1AZ1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetAZ1CIDR
+      AvailabilityZone: 
+        !Join
+          - ''
+          - - '{{resolve:ssm:/az-mapping/az1:1}}'
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet-AZ1
+
+  PrivateSubnet1AZ2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetAZ2CIDR
+      AvailabilityZone:
+        !Join
+          - ''
+          - - '{{resolve:ssm:/az-mapping/az2:1}}'
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet-AZ2
+              
+  PrivateSubnet1AZ3:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetAZ3CIDR
+      AvailabilityZone:
+        !Join
+          - ''
+          - - '{{resolve:ssm:/az-mapping/az3:1}}'
+      Tags:
+        - Key: Name
+          Value: PrivateSubnet-AZ3

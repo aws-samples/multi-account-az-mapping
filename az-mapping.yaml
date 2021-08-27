@@ -1,0 +1,178 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Map zone-ids to zone-names to support multi-account zonal consistency for VPCs
+Parameters:
+  AZIds:
+    Type: CommaDelimitedList
+    Description: An ordered list of the AZ zone IDs that will be used for mapping. (example default values provided for us-east-1)
+    Default: use1-az6,use1-az4,use1-az5
+  LogsRetentionInDays:
+    Type: Number
+    Description: Number of days to retain log events in CloudWatch log group
+    AllowedValues:
+      - 1
+      - 3
+      - 5
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+      - 120
+      - 150
+      - 180
+      - 365
+      - 400
+      - 545
+      - 731
+      - 1827
+      - 3653
+
+Resources:
+  LambdaIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          Effect: Allow
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+          Action:
+            - 'sts:AssumeRole'
+      MaxSessionDuration: 3600
+      Path: /
+      Policies:
+        # Allow storing and deleting to the parameter store
+        - PolicyName: ParameterStorePutDelete
+          PolicyDocument: 
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action: 
+              - ssm:PutParameter
+              - ssm:DeleteParameter
+              Resource:
+              - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/az-mapping/*"
+        # Allow to describe AZs to determine zone-id mapping. * is required for the resource policy
+        - PolicyName: DescribeAZs
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action: 
+              - ec2:DescribeAvailabilityZones
+              Resource:
+              - '*'
+        # Allow Lambda to write to its specific log group
+        - PolicyName: LambdaExecutionRoleForLogGroup
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action: 
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/vpc-mappings-${AWS::AccountId}:*"
+
+  AZMappingFunction:
+    Type: AWS::Lambda::Function
+    Properties: 
+      Description: Stores VPC mappings into parameter store
+      FunctionName: !Sub "vpc-mappings-${AWS::AccountId}"
+      Handler: index.lambda_handler
+      Runtime: python3.7
+      Role: !GetAtt LambdaIAMRole.Arn
+      Timeout: 5
+      Code:
+        ZipFile: |
+          import boto3
+          import cfnresponse
+
+          def lambda_handler(event, context):
+              azIds = event['ResourceProperties']['azIds']
+
+              if event['RequestType'] == 'Create':    
+                  create(azIds)
+              elif event['RequestType'] == 'Delete':
+                  delete(azIds)
+              elif event['RequestType'] == 'Update':
+                  delete(azIds)
+                  create(azIds)
+              else:
+                  print('no changes')
+
+              response_data = {}
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, response_data)
+
+
+          # Use the ordered parameter list of azIds (zone ids) to create SSM Parameters 
+          # for the AZ Mapping. Store the resulting zone name mapping along with the zone-id
+          def create(azIds):
+              ssm = boto3.client('ssm')
+              
+              azs = getAZs(azIds)
+              for az in azs:
+                  azId = az.get('ZoneId')
+                  azName = az.get('ZoneName')
+                  # AZ Number should match the ordered zone id parameter
+                  azNumber = azIds.index(azId) + 1
+                  ssm.put_parameter(
+                      Name='/az-mapping/az' + str(azNumber), 
+                      Description=azId,
+                      Value=azName,
+                      Type='String',
+                      Overwrite=True,
+                      Tier='Standard')
+
+          # Delete the az mapping parameters
+          def delete(azIds):
+              ssm = boto3.client('ssm')
+              
+              azNumber=1
+              azs = getAZs(azIds)
+              for az in azs:
+                  ssm.delete_parameter(
+                      Name='/az-mapping/az' + str(azNumber)
+                      )
+                  azNumber = azNumber + 1
+
+          # Get the AZ objects that match the given zone IDs
+          def getAZs(azIds):
+              ec2c = boto3.client('ec2')
+              r = ec2c.describe_availability_zones(
+                      ZoneIds=azIds
+                  )
+              azs = r.get('AvailabilityZones')
+              return azs
+
+  ## Although this log group would be otherwise created, we do it here to define the retention for cost purposes.
+  AZMappingFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AZMappingFunction}
+      RetentionInDays: !Ref LogsRetentionInDays
+
+  InvokeAZMappingFunction:
+    Type: Custom::LambdaAzMappings
+    DependsOn: AZMappingFunctionLogGroup
+    Properties:
+      ServiceToken: !GetAtt AZMappingFunction.Arn
+      azIds: !Ref AZIds
+
