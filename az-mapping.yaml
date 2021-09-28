@@ -85,7 +85,6 @@ Resources:
             Statement:
             - Effect: Allow
               Action: 
-              - logs:CreateLogGroup
               - logs:CreateLogStream
               - logs:PutLogEvents
               Resource:
@@ -108,7 +107,7 @@ Resources:
           def lambda_handler(event, context):
               azIds = event['ResourceProperties']['azIds']
 
-              if event['RequestType'] == 'Create':    
+              if event['RequestType'] == 'Create':
                   create(azIds)
               elif event['RequestType'] == 'Delete':
                   delete(azIds)
@@ -176,3 +175,7 @@ Resources:
       ServiceToken: !GetAtt AZMappingFunction.Arn
       azIds: !Ref AZIds
 
+Outputs:
+  Version:
+    Description: The version of the az-mapping solution.
+    Value: 1.0

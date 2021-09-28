@@ -19,7 +19,7 @@ import cfnresponse
 def lambda_handler(event, context):
     azIds = event['ResourceProperties']['azIds']
 
-    if event['RequestType'] == 'Create':    
+    if event['RequestType'] == 'Create':
         create(azIds)
     elif event['RequestType'] == 'Delete':
         delete(azIds)
