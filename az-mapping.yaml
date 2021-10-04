@@ -96,7 +96,7 @@ Resources:
       Description: Stores VPC mappings into parameter store
       FunctionName: !Sub "vpc-mappings-${AWS::AccountId}"
       Handler: index.lambda_handler
-      Runtime: python3.7
+      Runtime: python3.8
       Role: !GetAtt LambdaIAMRole.Arn
       Timeout: 5
       Code:
