@@ -1,4 +1,4 @@
-## Mutli-Account Availability Zone (AZ) mapping
+## Multi-Account Availability Zone (AZ) mapping
 
 AWS independently maps Availability Zone names for each individual account. This means that for example an AZ named us-east-1a in one account might not be the same location as us-east-1a in another AWS account. 
 
