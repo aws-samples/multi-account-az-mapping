@@ -1,5 +1,7 @@
 ## Multi-Account Availability Zone (AZ) mapping
 
+This repo contains the code used in the AWS Prescriptive Guidance pattern named [Use consistent Availability Zones in VPCs across different AWS accounts](https://docs.aws.amazon.com/prescriptive-guidance/latest/patterns/use-consistent-availability-zones-in-vpcs-across-different-aws-accounts.html).  
+
 AWS independently maps Availability Zone names for each individual account. This means that for example an AZ named us-east-1a in one account might not be the same location as us-east-1a in another AWS account. 
 
 Multi-account organizations may have a requirement to ensure a consistent AZ mapping for all of their subnets in their VPCs across their accounts. This solution can deploy resources in each of your accounts to aide in ensuring the same Availability Zone IDs are used when creating subnets, and not relying on the AZ name.
